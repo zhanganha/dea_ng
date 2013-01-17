@@ -1,0 +1,18 @@
+#!/bin/bash
+
+set -x
+set -e
+
+# Test Ruby
+(
+  #rvm use 1.9.3
+  bundle install
+  bundle exec rake spec
+)
+
+# Test Go
+(
+  cd go
+  bin/go test -i directoryserver
+  bin/go test -v directoryserver
+)
