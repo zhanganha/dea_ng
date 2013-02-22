@@ -45,10 +45,12 @@ module Helpers
     {
       "properties" => {
         "runtime" => "ruby",
-        "runtime_info" => "",
+        "runtime_info" => {},
         "framework_info" => {
           "name" => "sinatra"
-        }
+        },
+        "services" => [],
+        "resources" => { "memory" => 1, "disk" => 1, "fds" => 1 }
       },
       "download_uri" => "http://127.0.0.1:12346/download",
       "upload_uri" => "http://127.0.0.1:12346/upload",

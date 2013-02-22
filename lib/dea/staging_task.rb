@@ -126,11 +126,14 @@ module Dea
     end
 
     def promise_unpack_app
-      Promise.new do |p|
-        logger.info "<staging> Unpacking app to #{WARDEN_UNSTAGED_DIR}"
-        script = "unzip -q #{downloaded_droplet_path} -d #{WARDEN_UNSTAGED_DIR}"
-        promise_warden_run(:app, script).resolve
+      promise_unpack(downloaded_droplet_path, WARDEN_UNSTAGED_DIR)
+    end
 
+    def promise_unpack(src_path, dest_path)
+      Promise.new do |p|
+        logger.info "<staging> Unpacking #{src_path} to #{dest_path}"
+        script = "unzip -q #{src_path} -d #{dest_path}"
+        promise_warden_run(:app, script).resolve
         p.deliver
       end
     end
@@ -145,15 +148,17 @@ module Dea
     end
 
     def promise_app_download
+      promise_file_download(attributes["download_uri"], downloaded_droplet_path)
+    end
+    def promise_file_download(uri, filepath)
       Promise.new do |p|
-        logger.info("<staging> Downloading application from #{attributes["download_uri"]}")
+        logger.info("<staging> Downloading from #{uri}")
 
-        Download.new(attributes["download_uri"], workspace_dir).download! do |error, path|
+        Download.new(uri, workspace_dir).download! do |error, path|
           if !error
-            File.rename(path, downloaded_droplet_path)
-            File.chmod(0744, downloaded_droplet_path)
-
-            logger.debug "<staging> Moved droplet to #{downloaded_droplet_path}"
+            File.rename(path, filepath)
+            File.chmod(0744, filepath)
+            logger.debug "<staging> Moved download to #{filepath}"
             p.deliver
           else
             p.fail(error)
@@ -221,7 +226,8 @@ module Dea
     end
 
     def resolve_staging
-      [ promise_unpack_app,
+      [
+        promise_unpack_app,
         promise_stage,
         promise_pack_app,
         promise_copy_out,

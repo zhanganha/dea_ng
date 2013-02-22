@@ -10,7 +10,7 @@ describe Dea::StagingTask do
     {
       "base_dir" => ".",
       "directory_server" => {"file_api_port" => 1234},
-      "staging" => {"environment" => {}},
+      "staging" => {"environment" => {}, "platform_config" => {} },
     }
   end
 
@@ -262,8 +262,13 @@ describe Dea::StagingTask do
       File.exists?(workspace_dir).should be_false
     end
 
-    it "prepare workspace, download app source, creates container and then obtains container info" do
-      %w(prepare_workspace promise_app_download promise_create_container promise_container_info).each do |step|
+    it "prepares workspace, downloads the app and artifact cache, and creates the container" do
+      %w(
+        prepare_workspace
+        promise_app_download
+        promise_create_container
+        promise_container_info
+      ).each do |step|
         staging.should_receive(step).ordered.and_return(successful_promise)
       end
 
@@ -272,7 +277,14 @@ describe Dea::StagingTask do
     end
 
     it "unpacks, stages, repacks, copies files out of container, upload staged app and then destroys" do
-      %w(unpack_app stage pack_app copy_out app_upload destroy).each do |step|
+      %w(
+        unpack_app
+        stage
+        pack_app
+        copy_out
+        app_upload
+        destroy
+      ).each do |step|
         staging.should_receive("promise_#{step}").ordered.and_return(successful_promise)
       end
 
@@ -340,6 +352,15 @@ describe Dea::StagingTask do
     end
   end
 
+  describe "#prepare_workspace" do
+    it "generates a config file for staging" do
+      staging.prepare_workspace
+      staging_config = YAML.load_file("#{workspace_dir}/plugin_config")
+      expect(staging_config["source_dir"]).to eq("/tmp/unstaged")
+      expect(staging_config["dest_dir"]).to eq("/tmp/staged")
+    end
+  end
+
   describe "#promise_app_download" do
     subject do
       promise = staging.promise_app_download
@@ -353,12 +374,21 @@ describe Dea::StagingTask do
     end
 
     context "when there is no error" do
+      let!(:download) { Download.new(uri, workspace_dir) }
+      let(:uri) { valid_staging_attributes["download_uri"] }
+
       before do
         File.stub(:rename)
         File.stub(:chmod)
         Download.any_instance.stub(:download!).and_yield(nil, "/path/to/file")
       end
+
       its(:result) { should == [:deliver, nil]}
+
+      it "downloads the file from the correct uri" do
+        Download.should_receive(:new).with(uri, workspace_dir).and_return(download)
+        subject
+      end
 
       it "should rename the file" do
         File.should_receive(:rename).with("/path/to/file", "/path/to/downloaded/droplet")
