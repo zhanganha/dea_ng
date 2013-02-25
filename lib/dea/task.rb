@@ -183,7 +183,7 @@ module Dea
           }
 
           logger.warn("%s exited with status %d" % [script.inspect, response.exit_status], data)
-          p.fail(WardenError.new("Script exited with status %d" % response.exit_status))
+          p.fail(WardenError.new("Script failed: %s, %s" % [response.stderr, response.stdout]))
         else
           p.deliver(response)
         end

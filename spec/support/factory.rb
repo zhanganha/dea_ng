@@ -47,7 +47,7 @@ module Helpers
         "runtime" => "ruby",
         "runtime_info" => {},
         "framework_info" => {
-          "name" => "sinatra"
+          "name" => "buildpack"
         },
         "services" => [],
         "resources" => { "memory" => 1, "disk" => 1, "fds" => 1 }

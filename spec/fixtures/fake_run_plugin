@@ -1,0 +1,3 @@
+#!/bin/bash
+
+echo 'generated-by-buildpack' > './app/generated-file.txt'

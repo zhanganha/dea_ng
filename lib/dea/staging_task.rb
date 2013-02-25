@@ -90,6 +90,7 @@ module Dea
     def prepare_workspace
       StagingPlugin::Config.to_file({
         "source_dir"   => WARDEN_UNSTAGED_DIR,
+        "cache_dir" => "",
         "dest_dir"     => WARDEN_STAGED_DIR,
         "environment"  => attributes["properties"]
       }, plugin_config_path)
@@ -104,12 +105,14 @@ module Dea
         script = "mkdir -p #{WARDEN_STAGED_DIR}/logs && "
         script += [staging_environment.map {|k, v| "#{k}=#{v}"}.join(" "),
                    config["dea_ruby"], run_plugin_path,
-                   attributes["properties"]["framework_info"]["name"],
-                   plugin_config_path, "> #{WARDEN_STAGING_LOG} 2>&1"].join(" ")
+                   plugin_config_path, "# > #{WARDEN_STAGING_LOG} 2>&1"].join(" ")
         logger.info("<staging> Running #{script}")
 
         begin
           promise_warden_run(:app, script).resolve
+        rescue => e
+          p e
+          raise
         ensure
           promise_task_log.resolve
         end
@@ -150,6 +153,7 @@ module Dea
     def promise_app_download
       promise_file_download(attributes["download_uri"], downloaded_droplet_path)
     end
+
     def promise_file_download(uri, filepath)
       Promise.new do |p|
         logger.info("<staging> Downloading from #{uri}")
