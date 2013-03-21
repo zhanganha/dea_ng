@@ -4,6 +4,7 @@ require "spec_helper"
 require "dea/staging_task"
 require "dea/directory_server_v2"
 require "em-http"
+require 'dea/utils/logplex_helper'
 
 describe Dea::StagingTask do
   let(:config) do
@@ -32,6 +33,7 @@ describe Dea::StagingTask do
     staging.stub(:staged_droplet_path) { __FILE__ }
     staging.stub(:downloaded_droplet_path) { "/path/to/downloaded/droplet" }
     staging.stub(:logger) { logger }
+    LogplexHelper.any_instance.stub(:log_message)
   end
 
   describe "#promise_stage" do
@@ -315,6 +317,14 @@ describe Dea::StagingTask do
         staging.should_receive("promise_#{step}").ordered.and_return(successful_promise)
       end
 
+      stub_staging_setup
+      staging.start
+    end
+
+    it 'outputs a staging log to logplex' do
+      LogplexHelper.should_receive(:log_message).with("staging app-guid")
+
+      stub_staging
       stub_staging_setup
       staging.start
     end

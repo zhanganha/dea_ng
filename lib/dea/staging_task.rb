@@ -45,6 +45,8 @@ module Dea
 
     def start
       staging_promise = Promise.new do |p|
+        LogplexHelper.log_message("staging app-guid")
+
         logger.info("Starting staging task")
         logger.info("Setting up temporary directories")
         logger.info("Working dir in #{workspace_dir}")
