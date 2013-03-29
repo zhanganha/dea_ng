@@ -13,7 +13,7 @@ then
     # Currently warden does not work on Travis
     # so let's just sit here forever until foreman is killed.
     # (Tests that require Warden are skipped.)
-    read
+    wait $$
 else
     # as configured in the Vagrant VM
     WARDEN_DIR=/warden/warden
