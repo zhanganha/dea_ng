@@ -1,6 +1,12 @@
 #!/bin/bash
 
+read
+echo $?
+
 set -e
+set -x
+
+echo $TRAVIS_BRANCH
 
 if [ $TRAVIS_BRANCH ]
 then
