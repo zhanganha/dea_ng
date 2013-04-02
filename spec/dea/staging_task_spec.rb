@@ -48,6 +48,7 @@ describe Dea::StagingTask do
     staging.stub(:staged_droplet_path) { __FILE__ }
     staging.stub(:downloaded_droplet_path) { "/path/to/downloaded/droplet" }
     staging.stub(:logger) { logger }
+    staging.stub(:container_exists?) { true }
   end
 
   describe "#promise_stage" do
@@ -60,6 +61,20 @@ describe Dea::StagingTask do
       end
 
       staging.promise_stage.resolve
+    end
+
+    context "when task is stopped and received a warden error" do
+      before do
+        staging.stub(:state) { "STOPPED" }
+      end
+
+      it "initiates collection of task log if" do
+        staging.should_receive(:staging_environment).and_return(staging_env)
+
+        staging.should_receive(:promise_warden_run) { raise Dea::Task::WardenError.new("Script exited with status 255") }
+
+        expect { staging.promise_stage.resolve }.to raise_error Dea::StagingTask::StagingTaskStoppedError
+      end
     end
   end
 
