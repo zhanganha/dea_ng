@@ -3,6 +3,7 @@ require "fileutils"
 module Dea
   class StagingTaskWorkspace
     DROPLET_FILE = "droplet.tgz"
+    BUILDPACK_CACHE_FILE = "buildpack_cache.tgz"
     STAGING_LOG = "staging_task.log"
 
     def initialize(base_dir)
@@ -30,6 +31,10 @@ module Dea
       "/tmp/#{DROPLET_FILE}"
     end
 
+    def warden_staged_buildpack_cache
+      "/tmp/#{BUILDPACK_CACHE_FILE}"
+    end
+
     def warden_cache
       "/tmp/cache"
     end
@@ -48,6 +53,10 @@ module Dea
 
     def staged_droplet_path
       File.join(staged_droplet_dir, DROPLET_FILE)
+    end
+
+    def staged_buildpack_cache_path
+      File.join(staged_droplet_dir, BUILDPACK_CACHE_FILE)
     end
 
     def staged_droplet_dir

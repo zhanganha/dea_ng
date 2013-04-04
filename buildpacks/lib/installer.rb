@@ -13,7 +13,7 @@ module Buildpacks
 
     def compile
       puts "Installing #{path.basename}."
-      ok = system "#{command('compile')} /tmp/bundler_cache"
+      ok = system "#{command('compile')} /tmp/cache"
       raise "Buildpack compilation step failed:\n" unless ok
     end
 
