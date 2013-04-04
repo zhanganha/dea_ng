@@ -267,6 +267,19 @@ module Dea
       end
     end
 
+    def promise_buildpack_cache_upload
+      Promise.new do |p|
+        Upload.new(workspace.staged_buildpack_cache_path, attributes["buildpack_cache_upload_uri"], logger).upload! do |error|
+          if error
+            p.fail(error)
+          else
+            logger.info("Uploaded buildpack cache to #{attributes["buildpack_cache_upload_uri"]}")
+            p.deliver
+          end
+        end
+      end
+    end
+
     def promise_log_upload_finished
       Promise.new do |p|
         promise_warden_run(:app, <<-BASH).resolve
@@ -296,6 +309,26 @@ module Dea
           unless @container_path = response.container_path
 
         p.deliver(response)
+      end
+    end
+
+    def promise_pack_buildpack_cache
+      Promise.new do |p|
+        promise_warden_run(:app, <<-BASH).resolve
+          mkdir -p #{workspace.warden_cache} &&
+          cd #{workspace.warden_cache} &&
+          COPYFILE_DISABLE=true tar -czf #{workspace.warden_staged_buildpack_cache} .
+        BASH
+        p.deliver
+      end
+    end
+
+    def promise_copy_out_buildpack_cache
+      Promise.new do |p|
+        logger.info("Copying out to #{workspace.staged_droplet_path}")
+        copy_out_request(workspace.warden_staged_buildpack_cache, workspace.staged_droplet_dir)
+
+        p.deliver
       end
     end
 
@@ -335,6 +368,9 @@ module Dea
         promise_copy_out,
         promise_log_upload_started,
         promise_app_upload,
+        promise_pack_buildpack_cache,
+        promise_copy_out_buildpack_cache,
+        promise_buildpack_cache_upload,
         promise_log_upload_finished,
         promise_staging_info
       )
