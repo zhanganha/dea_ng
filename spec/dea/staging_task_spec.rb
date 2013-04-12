@@ -263,6 +263,9 @@ YAML
       staging.stub(:promise_log_upload_started).and_return(successful_promise)
       staging.stub(:promise_copy_out).and_return(successful_promise)
       staging.stub(:promise_app_upload).and_return(successful_promise)
+      staging.stub(:promise_pack_buildpack_cache).and_return(successful_promise)
+      staging.stub(:promise_copy_out_buildpack_cache).and_return(successful_promise)
+      staging.stub(:promise_buildpack_cache_upload).and_return(successful_promise)
       staging.stub(:promise_log_upload_finished).and_return(successful_promise)
       staging.stub(:promise_staging_info).and_return(successful_promise)
       staging.stub(:promise_task_log).and_return(successful_promise)
@@ -381,7 +384,7 @@ YAML
       end
     end
 
-    it "prepare workspace, download app source, creates container, prepares staging log, creates app dir and then obtains container info" do
+    it "performs staging setup operations in correct order" do
       %w(prepare_workspace
          promise_app_download
          promise_create_container
@@ -398,8 +401,9 @@ YAML
       staging.start
     end
 
-    it "unpacks, stages, repacks, copies files out of container, upload staged app and then destroys" do
-      %w(unpack_app stage pack_app copy_out log_upload_started app_upload log_upload_finished staging_info task_log destroy).each do |step|
+    it "performs staging operations in correct order" do
+      %w(unpack_app stage pack_app copy_out log_upload_started app_upload pack_buildpack_cache copy_out_buildpack_cache
+buildpack_cache_upload log_upload_finished staging_info task_log destroy).each do |step|
         staging.should_receive("promise_#{step}").ordered.and_return(successful_promise)
       end
 
@@ -577,9 +581,38 @@ YAML
     end
   end
 
+  describe "#promise_pack_buildpack_cache" do
+    it "assembles a shell command" do
+      staging.should_receive(:promise_warden_run) do |_, cmd|
+        normalize_whitespace(cmd).should include("cd /tmp/cache && COPYFILE_DISABLE=true tar -czf /tmp/buildpack_cache.tgz .")
+        mock("promise", :resolve => nil)
+      end
+
+      staging.promise_pack_buildpack_cache.resolve
+    end
+  end
+
   describe "#promise_app_upload" do
     subject do
       promise = staging.promise_app_upload
+      promise.resolve
+      promise
+    end
+
+    context "when there is an error" do
+      before { Upload.any_instance.stub(:upload!).and_yield("This is an error") }
+      it { expect { subject }.to raise_error(RuntimeError, "This is an error") }
+    end
+
+    context "when there is no error" do
+      before { Upload.any_instance.stub(:upload!).and_yield(nil) }
+      its(:result) { should == [:deliver, nil] }
+    end
+  end
+
+  describe "#promise_buildpack_cache_upload" do
+    subject do
+      promise = staging.promise_buildpack_cache_upload
       promise.resolve
       promise
     end
@@ -610,6 +643,19 @@ YAML
 
     it "should send copying out request" do
       staging.should_receive(:copy_out_request).with("/tmp/droplet.tgz", /.{5,}/)
+      subject
+    end
+  end
+
+  describe "#promise_copy_out_buildpack_cache" do
+    subject do
+      promise = staging.promise_copy_out_buildpack_cache
+      promise.resolve
+      promise
+    end
+
+    it "should send copying out request" do
+      staging.should_receive(:copy_out_request).with("/tmp/buildpack_cache.tgz", /.{5,}/)
       subject
     end
   end
