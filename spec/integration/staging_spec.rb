@@ -1,4 +1,5 @@
 require "spec_helper"
+require "net/http"
 
 describe "Staging an app", :type => :integration, :requires_warden => true do
   FILE_SERVER_DIR = "/tmp/dea"
@@ -92,7 +93,7 @@ describe "Staging an app", :type => :integration, :requires_warden => true do
 
     context "when a buildpack url is specified" do
       let(:buildpack_url) { fake_buildpack_url("start_command") }
-      let(:staging_properties) { { "buildpack" => buildpack_url } }
+      let(:staging_properties) { {"buildpack" => buildpack_url} }
 
       before { setup_fake_buildpack("start_command") }
 
@@ -113,6 +114,16 @@ describe "Staging an app", :type => :integration, :requires_warden => true do
         FileUtils.rm_rf(buildpack_cache_file)
         nats.request("staging", start_staging_message)
         expect(File.exist?(buildpack_cache_file)).to be_true
+      end
+
+      it "downloads buildpack cache before staging" do
+        response = nats.request("staging", start_staging_message)
+        Dir.mktmpdir do |tmp|
+          Dir.chdir(tmp) do
+            `curl -s #{staged_url} | tar -`
+            expect(File.exist?("cached_file")).to be_true
+          end
+        end
       end
 
       context "when staging is running" do
@@ -196,7 +207,7 @@ describe "Staging an app", :type => :integration, :requires_warden => true do
         message = Yajl::Encoder.encode(start_staging_message)
 
         first_response = lambda do |_|
-          NATS.publish("staging.stop",  Yajl::Encoder.encode({"app_id" => "some-app-id"}))
+          NATS.publish("staging.stop", Yajl::Encoder.encode({"app_id" => "some-app-id"}))
         end
 
         second_response = lambda do |response|

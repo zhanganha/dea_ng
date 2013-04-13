@@ -179,9 +179,10 @@ YAML
         YAML.load_file("#{workspace_dir}/plugin_config")
       end
 
-      it "has the right source and destination directories" do
+      it "has the right source, destination and cache directories" do
         expect(subject["source_dir"]).to eq("/tmp/unstaged")
         expect(subject["dest_dir"]).to eq("/tmp/staged")
+        expect(subject["cache_dir"]).to eq("/tmp/cache")
       end
 
       it "includes the specified environment config" do
@@ -247,29 +248,38 @@ YAML
   describe "#start" do
     def stub_staging_setup
       staging.stub(:prepare_workspace)
-      staging.stub(:promise_app_download).and_return(successful_promise)
-      staging.stub(:promise_create_container).and_return(successful_promise)
-      staging.stub(:promise_limit_disk).and_return(successful_promise)
-      staging.stub(:promise_limit_memory).and_return(successful_promise)
-      staging.stub(:promise_prepare_staging_log).and_return(successful_promise)
-      staging.stub(:promise_container_info).and_return(successful_promise)
-      staging.stub(:promise_app_dir).and_return(successful_promise)
+      %w(
+         app_download
+         buildpack_cache_download
+         create_container
+         limit_disk
+         limit_memory
+         prepare_staging_log
+         app_dir
+         container_info
+      ).each do |step|
+        staging.stub("promise_#{step}").and_return(successful_promise)
+      end
     end
 
     def stub_staging
-      staging.stub(:promise_unpack_app).and_return(successful_promise)
-      staging.stub(:promise_stage).and_return(successful_promise)
-      staging.stub(:promise_pack_app).and_return(successful_promise)
-      staging.stub(:promise_log_upload_started).and_return(successful_promise)
-      staging.stub(:promise_copy_out).and_return(successful_promise)
-      staging.stub(:promise_app_upload).and_return(successful_promise)
-      staging.stub(:promise_pack_buildpack_cache).and_return(successful_promise)
-      staging.stub(:promise_copy_out_buildpack_cache).and_return(successful_promise)
-      staging.stub(:promise_buildpack_cache_upload).and_return(successful_promise)
-      staging.stub(:promise_log_upload_finished).and_return(successful_promise)
-      staging.stub(:promise_staging_info).and_return(successful_promise)
-      staging.stub(:promise_task_log).and_return(successful_promise)
-      staging.stub(:promise_destroy).and_return(successful_promise)
+      %w(unpack_app
+         unpack_buildpack_cache
+         stage
+         pack_app
+         copy_out
+         log_upload_started
+         app_upload
+         pack_buildpack_cache
+         copy_out_buildpack_cache
+         buildpack_cache_upload
+         log_upload_finished
+         staging_info
+         task_log
+         destroy
+      ).each do |step|
+        staging.stub("promise_#{step}").and_return(successful_promise)
+      end
     end
 
     def self.it_calls_callback(callback_name, options={})
@@ -387,6 +397,7 @@ YAML
     it "performs staging setup operations in correct order" do
       %w(prepare_workspace
          promise_app_download
+         promise_buildpack_cache_download
          promise_create_container
          promise_limit_disk
          promise_limit_memory
@@ -402,8 +413,20 @@ YAML
     end
 
     it "performs staging operations in correct order" do
-      %w(unpack_app stage pack_app copy_out log_upload_started app_upload pack_buildpack_cache copy_out_buildpack_cache
-buildpack_cache_upload log_upload_finished staging_info task_log destroy).each do |step|
+      %w(unpack_app
+         unpack_buildpack_cache
+         stage
+         pack_app
+         copy_out
+         log_upload_started
+         app_upload
+         pack_buildpack_cache
+         copy_out_buildpack_cache
+         buildpack_cache_upload
+         log_upload_finished
+         staging_info
+         task_log
+         destroy).each do |step|
         staging.should_receive("promise_#{step}").ordered.and_return(successful_promise)
       end
 
@@ -559,6 +582,34 @@ buildpack_cache_upload log_upload_finished staging_info task_log destroy).each d
     end
   end
 
+  describe "#promise_buildpack_cache_download" do
+    subject do
+      promise = staging.promise_buildpack_cache_download
+      promise.resolve
+      promise
+    end
+
+    context "when there is an error" do
+      before { Download.any_instance.stub(:download!).and_yield("This is an error", nil) }
+      its(:result) { should == [:deliver, nil] }
+    end
+
+    context "when there is no error" do
+      before do
+        File.stub(:rename)
+        File.stub(:chmod)
+        Download.any_instance.stub(:download!).and_yield(nil, "/path/to/file")
+      end
+      its(:result) { should == [:deliver, nil] }
+
+      it "should rename the file" do
+        File.should_receive(:rename).with("/path/to/file", "#{workspace_dir}/buildpack_cache.tgz")
+        File.should_receive(:chmod).with(0744, "#{workspace_dir}/buildpack_cache.tgz")
+        subject
+      end
+    end
+  end
+
   describe "#promise_unpack_app" do
     it "assembles a shell command" do
       staging.should_receive(:promise_warden_run) do |connection_name, cmd|
@@ -567,6 +618,30 @@ buildpack_cache_upload log_upload_finished staging_info task_log destroy).each d
       end
 
       staging.promise_unpack_app.resolve
+    end
+  end
+
+  describe "#promise_unpack_buildpack_cache" do
+    context "when buildpack cache does not exist" do
+      it "does not run a warden command" do
+        staging.should_not_receive(:promise_warden_run)
+        staging.promise_unpack_buildpack_cache.resolve
+      end
+    end
+
+    context "when buildpack cache exists" do
+      before do
+        FileUtils.touch("#{workspace_dir}/buildpack_cache.tgz")
+      end
+
+      it "assembles a shell command" do
+        staging.should_receive(:promise_warden_run) do |_, cmd|
+          cmd.should include("tar xfz #{workspace_dir}/buildpack_cache.tgz -C /tmp/cache")
+          mock("promise", :resolve => nil)
+        end
+
+        staging.promise_unpack_buildpack_cache.resolve
+      end
     end
   end
 

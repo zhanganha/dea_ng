@@ -16,7 +16,6 @@ module Dea
     WARDEN_UNSTAGED_DIR = "/tmp/unstaged"
     WARDEN_STAGED_DIR = "/tmp/staged"
     WARDEN_STAGED_DROPLET = "/tmp/#{DROPLET_FILE}"
-    WARDEN_CACHE = "/tmp/cache"
     WARDEN_STAGING_LOG = "#{WARDEN_STAGED_DIR}/logs/#{STAGING_LOG}"
 
     class StagingError < StandardError
@@ -136,6 +135,7 @@ module Dea
       plugin_config = {
         "source_dir" => workspace.warden_unstaged_dir,
         "dest_dir" => workspace.warden_staged_dir,
+        "cache_dir" => workspace.warden_cache,
         "environment" => attributes["properties"],
         "staging_info_path" => workspace.warden_staging_info
       }
@@ -280,6 +280,25 @@ module Dea
       end
     end
 
+    def promise_buildpack_cache_download
+      Promise.new do |p|
+        logger.info("Downloading buildpack cache from #{attributes["buildpack_cache_download_uri"]}")
+
+        Download.new(attributes["buildpack_cache_download_uri"], workspace.workspace_dir, nil, logger).download! do |error, path|
+          if error
+            logger.debug("Failed to download buildpack cache from #{attributes["buildpack_cache_download_uri"]}")
+          else
+            File.rename(path, workspace.downloaded_buildpack_cache_path)
+            File.chmod(0744, workspace.downloaded_buildpack_cache_path)
+
+            logger.debug("Moved droplet to #{workspace.downloaded_buildpack_cache_path}")
+          end
+
+          p.deliver
+        end
+      end
+    end
+
     def promise_log_upload_finished
       Promise.new do |p|
         promise_warden_run(:app, <<-BASH).resolve
@@ -314,11 +333,28 @@ module Dea
 
     def promise_pack_buildpack_cache
       Promise.new do |p|
+        # TODO: Ignore if warden cache is empty or does not exists
         promise_warden_run(:app, <<-BASH).resolve
           mkdir -p #{workspace.warden_cache} &&
           cd #{workspace.warden_cache} &&
           COPYFILE_DISABLE=true tar -czf #{workspace.warden_staged_buildpack_cache} .
         BASH
+        p.deliver
+      end
+    end
+
+    def promise_unpack_buildpack_cache
+      Promise.new do |p|
+        if File.exists?(workspace.downloaded_buildpack_cache_path)
+          logger.info("Unpacking buildpack cache to #{workspace.warden_cache}")
+
+          promise_warden_run(:app, <<-BASH).resolve
+          package_size=`du -h #{workspace.downloaded_buildpack_cache_path} | cut -f1`
+          echo "-----> Downloaded app buildpack cache ($package_size)" >> #{workspace.warden_staging_log}
+          tar xfz #{workspace.downloaded_buildpack_cache_path} -C #{workspace.warden_cache}
+          BASH
+        end
+
         p.deliver
       end
     end
@@ -343,6 +379,7 @@ module Dea
 
       Promise.run_in_parallel(
         promise_app_download,
+        promise_buildpack_cache_download,
         promise_create_container,
       )
       promise_limit_disk.resolve
@@ -363,6 +400,7 @@ module Dea
     def resolve_staging
       Promise.run_serially(
         promise_unpack_app,
+        promise_unpack_buildpack_cache,
         promise_stage,
         promise_pack_app,
         promise_copy_out,

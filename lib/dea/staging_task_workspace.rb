@@ -32,6 +32,10 @@ module Dea
       "/tmp/#{DROPLET_FILE}"
     end
 
+    def warden_unstaged_buildpack_cache
+      "/tmp/#{BUILDPACK_CACHE_FILE}"
+    end
+
     def warden_staged_buildpack_cache
       "/tmp/#{BUILDPACK_CACHE_FILE}"
     end
@@ -86,6 +90,10 @@ module Dea
 
     def downloaded_droplet_path
       File.join(workspace_dir, "app.zip")
+    end
+
+    def downloaded_buildpack_cache_path
+      File.join(workspace_dir, BUILDPACK_CACHE_FILE)
     end
   end
 end

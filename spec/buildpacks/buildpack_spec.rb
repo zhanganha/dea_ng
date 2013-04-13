@@ -19,6 +19,10 @@ describe Buildpacks::Buildpack, :type => :buildpack do
       end
     end
 
+    it "copies buildpack cache" do
+
+    end
+
     it "puts the environment variables provided by 'release' into the startup script" do
       stage :environment => staging_env do |staged_dir|
         start_script = File.join(staged_dir, 'startup')
